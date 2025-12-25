@@ -74,7 +74,11 @@ class Post(PublishedModel, CreatedModel):
         on_delete=models.SET_NULL,
         null=True
     )
-
+    is_published = models.BooleanField(
+        verbose_name='Опубликовано',
+        default=True,
+        help_text='Если снята галочка — публикация будет скрыта.'
+    )
     class Meta:
         verbose_name = 'публикация'
         verbose_name_plural = 'Публикации'
