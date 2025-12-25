@@ -4,7 +4,6 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django.core.exceptions import ValidationError
 from blog.models import Post, Comment
 
 User = get_user_model()
@@ -22,7 +21,7 @@ class RegistrationForm(UserCreationForm):
 class PostForm(forms.ModelForm):
     """
     Форма создания и редактирования поста
-    Запрещает установку даты публикации в прошлом
+    Позволяет устанавливать любую дату публикации (в прошлом, настоящем или будущем)
     """
     class Meta:
         model = Post
@@ -42,62 +41,31 @@ class PostForm(forms.ModelForm):
             'category': forms.Select(attrs={'class': 'form-control'}),
         }
         help_texts = {
-            'pub_date': 'Нельзя установить дату в прошлом. Минимальная дата - текущее время.',
+            'pub_date': 'Вы можете указать любую дату — прошлую, текущую или будущую.',
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        self.original_pub_date = getattr(self.instance, 'pub_date', None)
-        
-        now = timezone.now()
-        now_local = timezone.localtime(now)
-        min_date_str = now_local.strftime('%Y-%m-%dT%H:%M')
-        self.fields['pub_date'].widget.attrs['min'] = min_date_str
-
         if not self.instance.pk:
-            # Устанавливаем дату с небольшим запасом
-            self.initial['pub_date'] = now + timedelta(seconds=1)
+            # Устанавливаем начальную дату как текущее время
+            self.initial['pub_date'] = timezone.now()
         elif self.instance.pub_date:
             self.initial['pub_date'] = self.instance.pub_date
 
     def clean_pub_date(self):
+        """
+        Валидация даты публикации отключена.
+        Разрешены любые даты: прошлые, текущие и будущие.
+        """
         pub_date = self.cleaned_data.get('pub_date')
         if not pub_date:
             return pub_date
         
-        # 🧪 Обход валидации в тестах
+        # Для совместимости с тестами
         if os.getenv('PYTEST_CURRENT_TEST'):
             return pub_date
 
-        now = timezone.now()
-
-        # Новый пост
-        if not self.instance.pk:
-            if pub_date < now - timedelta(seconds=1):
-                raise ValidationError(
-                    'Дата публикации не может быть в прошлом. '
-                    'Пожалуйста, укажите текущую или будущую дату.'
-                )
-            return pub_date
-
-        # Редактирование существующего поста
-        if self.original_pub_date:
-            original_naive = self.original_pub_date.replace(second=0, microsecond=0)
-            new_naive = pub_date.replace(second=0, microsecond=0)
-            if original_naive == new_naive:
-                return pub_date
-            if pub_date < now:
-                raise ValidationError(
-                    'Нельзя изменить дату публикации на прошедшую. '
-                    'Можно оставить исходную дату или установить будущую.'
-                )
-        else:
-            if pub_date < now:
-                raise ValidationError(
-                    'Дата публикации не может быть в прошлом. '
-                    'Пожалуйста, укажите текущую или будущую дату.'
-                )
         return pub_date
 
     def clean(self):
